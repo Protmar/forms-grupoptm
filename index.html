@@ -136,56 +136,59 @@
         if (dados.telefone.replace(/\D/g, "").length < 10) return err.textContent = "Informe um telefone com DDD.";
         if (dados.email && !/^\S+@\S+\.\S+$/.test(dados.email)) return err.textContent = "Confira o e-mail informado.";
         dados.lgpd = document.getElementById("lgpd").checked;
+        enviarContato();
         step = 0; render(); window.scrollTo(0, 0);
       };
       document.getElementById("nome").focus();
     }
 
-      function salvar(risk, score) {
-      const status = document.getElementById("saved");
-      
-      // 1. Organiza exatamente os mesmos dados que o seu código original já coletava
-      const payload = {
+    /* ===== Envio de e-mails (api/enviar-email.js) ===== */
+    // Falhas ficam só no console: o usuário nunca vê mensagens de erro
+    function enviarEmail(tipo, extra) {
+      const payload = Object.assign({
+        tipo,
         nome: dados.nome,
         empresa: dados.empresa,
         telefone: dados.telefone,
-        email: dados.email || 'Não informado',
-        autorizaContato: dados.lgpd ? "Sim" : "Não",
-        // Mapeia as perguntas e respostas no formato que o Nodemailer espera ler
+        email: dados.email,
+        autorizaContato: dados.lgpd ? "Sim" : "Não"
+      }, extra);
+
+      return fetch("/api/enviar-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        keepalive: true
+      })
+        .then(r => r.json().catch(() => ({})).then(j => {
+          if (!r.ok || !j.success) throw new Error(`HTTP ${r.status}: ${j.error || "falha no envio"}`);
+          return true;
+        }))
+        .catch(error => { console.error(`Erro ao enviar e-mail (${tipo}):`, error); return false; });
+    }
+
+    // EMAIL 1: dados de contato, enviado ao sair da tela "Seus dados".
+    // Só reenvia se o usuário voltar e alterar algum dado.
+    let contatoEnviado = "";
+    function enviarContato() {
+      const chave = JSON.stringify(dados);
+      if (chave === contatoEnviado) return;
+      contatoEnviado = chave;
+      enviarEmail("contato").then(ok => { if (!ok) contatoEnviado = ""; });
+    }
+
+    // EMAIL 2: dados + respostas, enviado ao exibir o resultado
+    function salvar(risk, score) {
+      if (salvo) return;
+      salvo = true;
+      enviarEmail("diagnostico", {
         respostas: QUESTIONS.map((q, i) => {
           const opt = OPTIONS.find(o => o.value === answers[i]);
-          return {
-            pergunta: q.t,
-            resposta: opt ? opt.label : 'Não respondida'
-          };
+          return { pergunta: q.t, resposta: opt ? opt.label : "Não respondida" };
         }),
         pontos: score,
         resultado: risk ? "Risco de interdição" : "Não corre risco de interdição"
-      };
-
-      status.textContent = "Registrando suas respostas e enviando e-mails...";
-
-      // 2. Avisa o arquivo 'api/enviar-email.js' para disparar os dois e-mails
-      fetch('/api/enviar-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      })
-      .then(response => response.json())
-      .then(resultado => {
-        if (resultado.success) {
-          salvo = true;
-          status.textContent = "Suas respostas foram registradas e os e-mails enviados com sucesso!";
-        } else {
-          status.textContent = "Não foi possível registrar: " + (resultado.error || "Erro no servidor.");
-        }
-      })
-      .catch(error => {
-        console.error('Erro de requisição:', error);
-        status.textContent = "Erro de conexão com o servidor. Verifique suas credenciais .env.";
-      });
+      }).then(ok => { if (!ok) salvo = false; });
     }
 
 
@@ -253,7 +256,6 @@
       ${waLink ? `<a class="btn" href="${waLink}" target="_blank" rel="noopener">Falar com um especialista</a>` : ''}
       <button class="btn ghost" id="restart">Refazer diagnóstico</button>
     </div>
-    <p class="saved" id="saved" aria-live="polite"></p>
     <p class="note">Este diagnóstico é orientativo e não substitui a apreciação de risco e o laudo técnico feitos por profissional habilitado.</p>`;
       document.getElementById("restart").onclick = () => { answers.fill(null); salvo = false; step = 0; render(); window.scrollTo(0, 0); };
       salvar(risk, score);
