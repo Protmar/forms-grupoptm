@@ -1,6 +1,6 @@
 const nodemailer = require('nodemailer');
 
-const DESTINO = 'comercial@protmar.com.br';
+const DESTINO = 'marketing@protmar.com.br';
 
 // Evita que dados digitados pelo usuário injetem HTML no e-mail
 function esc(v) {
