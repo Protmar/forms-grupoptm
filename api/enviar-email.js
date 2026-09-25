@@ -90,13 +90,15 @@ module.exports = async (req, res) => {
     const { subject, html } = montar(dados);
     const emailValido = /^\S+@\S+\.\S+$/.test(dados.email || '');
 
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from: `"Protmar Diagnóstico NR-12" <${process.env.MAILER_EMAIL}>`,
       to: DESTINO,
       replyTo: emailValido ? dados.email : undefined,
       subject,
       html,
     });
+
+    console.log('E-mail enviado:', { to: DESTINO, messageId: info.messageId, accepted: info.accepted, rejected: info.rejected, response: info.response });
 
     return res.status(200).json({ success: true });
   } catch (error) {
